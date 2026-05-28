@@ -2,91 +2,81 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 )
 
 func main() {
-	if len(os.Args) > 2 {
-		// Allow flag combinations like -s NAME
-		hasFlag := false
-		for _, arg := range os.Args[1:] {
-			if arg == "-s" || arg == "--section" {
-				hasFlag = true
-				break
-			}
-		}
-		if !hasFlag {
-			fmt.Fprintf(os.Stderr, "Usage: env-to-ini [file.env]\n")
-			fmt.Fprintf(os.Stderr, "\nConvert a .env file to INI format.\n")
-			fmt.Fprintf(os.Stderr, "Reads from stdin if no file provided.\n")
-			fmt.Fprintf(os.Stderr, "\nOptions:\n")
-			fmt.Fprintf(os.Stderr, "  -s, --section NAME  Group all keys under a section [NAME]\n")
-			fmt.Fprintf(os.Stderr, "\nExamples:\n")
-			fmt.Fprintf(os.Stderr, "  env-to-ini config.env\n")
-			fmt.Fprintf(os.Stderr, "  cat config.env | env-to-ini\n")
-			fmt.Fprintf(os.Stderr, "  env-to-ini -s database config.env\n")
+	inputPath := flag.String("i", "", "Fichier .env d'entrée (vide pour stdin)")
+	outputPath := flag.String("o", "", "Fichier INI de sortie (vide pour stdout)")
+	flag.Parse()
+
+	if *inputPath == "" && *outputPath == "" {
+		stat, err := os.Stdin.Stat()
+		if err != nil || stat.Mode()&os.ModeNamedPipe == 0 {
+			fmt.Fprintln(os.Stderr, "env-to-ini : convertit un fichier .env en format INI")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Usage :")
+			fmt.Fprintln(os.Stderr, "  env-to-ini -i .env")
+			fmt.Fprintln(os.Stderr, "  env-to-ini -i .env -o config.ini")
+			fmt.Fprintln(os.Stderr, "  cat .env | env-to-ini")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Options :")
+			flag.PrintDefaults()
 			os.Exit(1)
 		}
 	}
 
-	var section string
-	var filename string
-	args := os.Args[1:]
-
-	for len(args) > 0 {
-		switch args[0] {
-		case "-s", "--section":
-			if len(args) < 2 {
-				fmt.Fprintf(os.Stderr, "Error: --section requires a value\n")
-				os.Exit(1)
-			}
-			section = args[1]
-			args = args[2:]
-		default:
-			filename = args[0]
-			args = args[1:]
-		}
-	}
-
-	var reader io.Reader
-	if filename != "" {
-		f, err := os.Open(filename)
+	var reader *bufio.Scanner
+	if *inputPath != "" {
+		f, err := os.Open(*inputPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Erreur : impossible d'ouvrir %s : %v\n", *inputPath, err)
 			os.Exit(1)
 		}
 		defer f.Close()
-		reader = f
+		reader = bufio.NewScanner(f)
 	} else {
-		reader = os.Stdin
+		reader = bufio.NewScanner(os.Stdin)
 	}
 
-	scanner := bufio.NewScanner(reader)
-	type envVar struct {
-		Key   string
-		Value string
+	var writer *bufio.Writer = bufio.NewWriter(os.Stdout)
+	if *outputPath != "" {
+		f, err := os.Create(*outputPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Erreur : impossible de créer %s : %v\n", *outputPath, err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		writer = bufio.NewWriter(f)
 	}
-	var vars []envVar
 
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	defer writer.Flush()
+
+	count := 0
+	for reader.Scan() {
+		line := strings.TrimSpace(reader.Text())
+
+		// Ignorer les lignes vides et les commentaires
 		if line == "" || strings.HasPrefix(line, "#") {
+			if line != "" {
+				writer.WriteString(line + "\n")
+			}
 			continue
 		}
-		// Skip export prefix
-		line = strings.TrimPrefix(line, "export ")
 
-		idx := strings.IndexByte(line, '=')
+		// Trouver le premier =
+		idx := strings.Index(line, "=")
 		if idx == -1 {
 			continue
 		}
+
 		key := strings.TrimSpace(line[:idx])
 		value := strings.TrimSpace(line[idx+1:])
 
-		// Remove surrounding quotes
+		// Nettoyer les guillemets autour de la valeur
 		if len(value) >= 2 {
 			if (value[0] == '"' && value[len(value)-1] == '"') ||
 				(value[0] == '\'' && value[len(value)-1] == '\'') {
@@ -95,20 +85,23 @@ func main() {
 		}
 
 		if key != "" {
-			vars = append(vars, envVar{Key: key, Value: value})
+			writer.WriteString(key + " = " + value + "\n")
+			count++
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+	if err := reader.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Erreur lors de la lecture : %v\n", err)
 		os.Exit(1)
 	}
 
-	// Output INI format
-	if section != "" {
-		fmt.Printf("[%s]\n", section)
+	src := "stdin"
+	if *inputPath != "" {
+		src = *inputPath
 	}
-	for _, v := range vars {
-		fmt.Printf("%s = %s\n", v.Key, v.Value)
+	dst := "stdout"
+	if *outputPath != "" {
+		dst = *outputPath
 	}
+	fmt.Fprintf(os.Stderr, "%d variables converties de %s vers %s\n", count, src, dst)
 }

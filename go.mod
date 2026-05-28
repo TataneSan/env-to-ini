@@ -1,3 +1,3 @@
-module github.com/TataneSan/env-to-ini
+module env-to-ini
 
 go 1.21
