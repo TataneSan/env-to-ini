@@ -1,0 +1,12 @@
+# Binaries
+env-to-ini
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
