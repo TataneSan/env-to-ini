@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "env-to-ini"
+version = "1.0.0"
+description = "Convert .env files to INI format with prefix-based section mapping"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "TataneSan", email = "tatsanesan@users.noreply.github.com"}]
+keywords = ["dotenv", "env", "ini", "converter", "cli"]
+
+[project.scripts]
+env-to-ini = "env_to_ini.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["env_to_ini*"]

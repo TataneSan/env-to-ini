@@ -1,8 +1,5 @@
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-env-to-ini
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
